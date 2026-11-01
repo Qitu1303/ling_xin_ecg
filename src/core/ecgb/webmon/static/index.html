@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>聆心 · ECG Monitor</title>
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<!-- 顶栏 -->
+<header class="bar">
+  <div class="bar-left">
+    <span class="mark">聆心</span>
+    <span class="mark-sub">ECG</span>
+    <span class="rule"></span>
+    <span class="live" id="conn-pill" data-state="connecting">
+      <i class="dot"></i><span id="conn-text">连接中</span>
+    </span>
+  </div>
+
+  <div class="bar-mid mono">
+    <span><b id="v-fs">--</b> S/s</span><i class="rule"></i>
+    <span>drop <b id="v-drop">--</b></span><i class="rule"></i>
+    <span><b id="v-fps">--</b> fps</span><i class="rule"></i>
+    <span id="v-uptime">--:--</span>
+  </div>
+
+  <div class="bar-right">
+    <button class="btn primary" id="btn-record" type="button" title="记录开关（R）">
+      <span class="rec-dot" id="rec-dot"></span><span id="rec-label">记录</span>
+    </button>
+    <button class="btn" id="btn-quick30" type="button" title="30 秒快速测量">30s 测量</button>
+    <button class="btn" id="btn-mode" type="button" aria-pressed="false" title="滚动 / 扫描（S）">滚动</button>
+    <button class="btn" id="btn-pause" type="button" aria-pressed="false" title="暂停画面（空格）">暂停</button>
+    <button class="btn" id="btn-sound" type="button" aria-pressed="false" title="报警声开关">声音</button>
+  </div>
+</header>
+
+<!-- 主体 -->
+<main class="layout">
+
+  <!-- 波形舞台 -->
+  <section class="stage">
+    <div class="stage-head">
+      <h1>II 导联 <span class="dim">等效</span></h1>
+      <div class="stage-tools">
+        <div class="seg" id="win-seg" role="group" aria-label="时间窗">
+          <button class="seg-btn" data-w="3" type="button" aria-pressed="false" title="3 秒（T 循环 / 1）">3s</button>
+          <button class="seg-btn is-on" data-w="6" type="button" aria-pressed="true" title="6 秒（T 循环 / 2）">6s</button>
+          <button class="seg-btn" data-w="12" type="button" aria-pressed="false" title="12 秒（T 循环 / 3）">12s</button>
+        </div>
+        <div class="seg" id="gain-seg" role="group" aria-label="增益">
+          <button class="seg-btn" data-g="auto" type="button" aria-pressed="false" title="自动增益（G 循环切换）">自动</button>
+          <button class="seg-btn is-on" data-g="0.5" type="button" aria-pressed="true" title="0.5 倍">0.5×</button>
+          <button class="seg-btn" data-g="1" type="button" aria-pressed="false" title="1 倍">1×</button>
+          <button class="seg-btn" data-g="2" type="button" aria-pressed="false" title="2 倍">2×</button>
+        </div>
+        <div class="stage-meta mono">
+          <span id="gain-badge">量程 --</span>
+          <span id="beats-badge">R 峰 --</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage-canvas" id="wave-card" data-level="info">
+      <canvas id="wave-canvas" role="img" tabindex="0"
+              aria-label="实时心电波形（等效 II 导联）。悬停读数，点击钉住，左右方向键移动读数，空格暂停"></canvas>
+      <div class="overlay" id="wave-overlay"><span class="spin"></span><span>等待数据…</span></div>
+      <div class="alarm" id="alarm-flag" hidden role="alert" aria-live="assertive">
+        <span class="alarm-icon" id="alarm-icon" aria-hidden="true">▲</span><span id="alarm-text"></span>
+      </div>
+      <div class="paused" id="pause-badge" hidden role="status" aria-live="polite">已暂停 · 空格继续</div>
+      <div class="readout" id="readout" role="status" aria-live="polite" hidden>
+        <span class="ro-t mono" id="ro-t">--</span>
+        <span class="ro-v mono" id="ro-v">--</span>
+      </div>
+    </div>
+
+    <div class="stage-foot mono">
+      <span id="wave-foot-info">--</span>
+      <span class="dim">0.5× 增益 · 标准纸网格 · 悬停读数</span>
+    </div>
+
+    <div class="trend">
+      <div class="trend-head">
+        <span class="lbl">心率趋势</span>
+        <span class="mono dim" id="trend-info">--</span>
+      </div>
+      <canvas id="trend-canvas"></canvas>
+    </div>
+
+    <div class="strip">
+      <div class="trend-head">
+        <span class="lbl">节拍时间轴</span>
+        <span class="mono dim" id="strip-info">最近 60 s · R 峰 --</span>
+      </div>
+      <canvas id="strip-canvas"></canvas>
+    </div>
+
+    <div class="session" id="session-stats" aria-labelledby="lbl-session">
+      <div class="kv-item"><span class="k" id="lbl-session">会话时长</span><span class="v mono" id="ss-uptime">--:--</span></div>
+      <div class="kv-item"><span class="k">累计样本</span><span class="v mono" id="ss-samples">--</span></div>
+      <div class="kv-item"><span class="k">记录点数</span><span class="v mono" id="ss-recorded">--</span></div>
+      <div class="kv-item"><span class="k">漏样</span><span class="v mono" id="ss-dropped">--</span></div>
+      <div class="kv-item"><span class="k">实收速率</span><span class="v mono"><b id="ss-fs">--</b><span class="u">S/s</span></span></div>
+      <div class="kv-item"><span class="k">渲染</span><span class="v mono"><b id="ss-fps">--</b><span class="u">fps</span></span></div>
+    </div>
+  </section>
+
+  <!-- 参数栏 -->
+  <aside class="rail">
+
+    <section class="blk" id="hr-card" data-level="info" aria-labelledby="lbl-hr">
+      <div class="blk-head">
+        <span class="lbl" id="lbl-hr">心率</span>
+        <span class="chip" id="hr-quality">--</span>
+      </div>
+      <div class="hr-num"><b class="mono" id="v-hr">--</b><span class="unit">bpm</span></div>
+      <div class="meter" aria-hidden="true">
+        <div class="zone-lo" id="hr-zone-lo"></div>
+        <div class="zone-hi" id="hr-zone-hi"></div>
+        <i class="ptr" id="hr-ptr"></i>
+      </div>
+      <div class="meta mono">
+        <span><b id="hr-lo-tag">50</b>–<b id="hr-hi-tag">120</b> 限值</span>
+        <span id="v-rr">RR --</span>
+        <span id="v-nbeats">拍 --</span>
+        <span id="v-q">质量 --</span>
+      </div>
+    </section>
+
+    <section class="blk" id="rhythm-card" data-level="info" aria-labelledby="lbl-rhythm">
+      <div class="blk-head">
+        <span class="lbl" id="lbl-rhythm">节律</span>
+        <span class="chip" id="rhythm-level">--</span>
+      </div>
+      <div class="status" id="rhythm-status">等待数据…</div>
+      <ul class="mini" id="rhythm-events"></ul>
+    </section>
+
+    <section class="blk" id="hrv-card" aria-labelledby="lbl-hrv">
+      <div class="blk-head">
+        <span class="lbl" id="lbl-hrv">HRV</span>
+        <div class="seg" id="hrv-window-seg" role="group" aria-label="HRV 统计窗口">
+          <button class="seg-btn" data-w="30s" type="button" aria-pressed="false">30s</button>
+          <button class="seg-btn is-on" data-w="60s" type="button" aria-pressed="true">60s</button>
+          <button class="seg-btn" data-w="300s" type="button" aria-pressed="false">5m</button>
+        </div>
+      </div>
+      <div class="grid3">
+        <div class="metric"><span class="k">SDNN</span><span class="v mono" id="m-sdnn">--</span><span class="u">ms</span></div>
+        <div class="metric"><span class="k">RMSSD</span><span class="v mono" id="m-rmssd">--</span><span class="u">ms</span></div>
+        <div class="metric"><span class="k">pNN50</span><span class="v mono" id="m-pnn50">--</span><span class="u">%</span></div>
+        <div class="metric"><span class="k">平均 HR</span><span class="v mono" id="m-meanhr">--</span><span class="u">bpm</span></div>
+        <div class="metric"><span class="k">LF/HF</span><span class="v mono" id="m-lfhf">--</span><span class="u">—</span></div>
+        <div class="metric"><span class="k">总功率</span><span class="v mono" id="m-total">--</span><span class="u">ms²</span></div>
+      </div>
+      <p class="note" id="hrv-note">等待数据…</p>
+    </section>
+
+    <section class="blk" id="itv-card" aria-labelledby="lbl-itv">
+      <div class="blk-head">
+        <span class="lbl" id="lbl-itv">间期</span>
+        <span class="chip" id="itv-quality">--</span>
+      </div>
+      <div class="itv" id="itv-list">
+        <div class="itv-row" data-key="pr">
+          <span class="k">PR</span><span class="itv-bar"><i class="itv-zone"></i><b class="itv-ptr"></b></span>
+          <span class="v mono" id="itv-pr">--</span>
+        </div>
+        <div class="itv-row" data-key="qrs">
+          <span class="k">QRS</span><span class="itv-bar"><i class="itv-zone"></i><b class="itv-ptr"></b></span>
+          <span class="v mono" id="itv-qrs">--</span>
+        </div>
+        <div class="itv-row" data-key="qt">
+          <span class="k">QT</span><span class="itv-bar"><i class="itv-zone"></i><b class="itv-ptr"></b></span>
+          <span class="v mono" id="itv-qt">--</span>
+        </div>
+        <div class="itv-row" data-key="qtc">
+          <span class="k">QTc</span><span class="itv-bar"><i class="itv-zone"></i><b class="itv-ptr"></b></span>
+          <span class="v mono" id="itv-qtc">--</span>
+        </div>
+      </div>
+      <p class="note" id="itv-note">等待数据…</p>
+    </section>
+
+    <section class="blk" id="qual-card" aria-labelledby="lbl-qual">
+      <div class="blk-head">
+        <span class="lbl" id="lbl-qual">信号质量</span>
+        <span class="chip" id="qual-state">--</span>
+      </div>
+      <div class="sqi">
+        <span class="sqi-num mono" id="sqi-text">--</span>
+        <span class="sqi-track"><i id="sqi-bar"></i></span>
+        <span class="dim">SQI</span>
+      </div>
+      <div class="kv mono">
+        <span>峰峰 <b id="q-pp">--</b></span>
+        <span>采样 <b id="q-rate">--</b></span>
+        <span>漏样 <b id="q-drop">--</b></span>
+        <span>电极 <b id="q-electrode">--</b></span>
+      </div>
+    </section>
+
+  </aside>
+
+  <section class="blk ev-wide" id="ev-card" aria-labelledby="lbl-ev">
+    <div class="blk-head">
+      <span class="lbl" id="lbl-ev">事件</span>
+      <span class="chip mono" id="ev-count">0</span>
+    </div>
+    <!-- 事件列表不加 role="log"/aria-live：高优先级事件已由 #alarm-flag(assertive) 播报，避免重复打扰 -->
+    <ul class="log" id="event-list"></ul>
+  </section>
+
+</main>
+
+<!-- 页脚 -->
+<footer class="foot">
+  <span>教学演示 · 不作为医疗诊断用途</span>
+  <div class="foot-tools">
+    <button class="btn tiny" id="btn-shot" type="button" title="导出当前波形与参数为 PNG（E）">导出快照</button>
+    <button class="btn tiny" id="btn-help" type="button" aria-haspopup="dialog" title="快捷键与说明（?）">快捷键 ?</button>
+    <button class="btn tiny" id="btn-theme" type="button" aria-pressed="false" title="高对比主题（C）">高对比</button>
+    <button class="btn tiny" id="btn-sr" type="button" aria-pressed="false"
+            title="读屏摘要（默认关闭）：开启后约每 15 秒播报心率、节律与信号状态">读屏摘要</button>
+  </div>
+  <span class="mono" id="foot-meta">--</span>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<!-- 读屏摘要（视觉上不可见，仅播报关键指标；可关闭） -->
+<div class="sr-only" id="sr-summary" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<!-- 快捷键与说明面板 -->
+<div class="modal" id="help" hidden role="dialog" aria-modal="true" aria-labelledby="help-title">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="help-title">快捷键与说明</h2>
+      <button class="btn tiny" id="btn-help-close" type="button">关闭 Esc</button>
+    </div>
+    <div class="modal-body">
+      <dl class="keys">
+        <dt>空格</dt><dd>暂停 / 继续画面（数据继续采集）</dd>
+        <dt>R</dt><dd>开始 / 停止记录</dd>
+        <dt>S</dt><dd>滚动 ↔ 扫描模式</dd>
+        <dt>T</dt><dd>循环时间窗 3 / 6 / 12 秒</dd>
+        <dt>1 / 2 / 3</dt><dd>直接选择时间窗</dd>
+        <dt>← →</dt><dd>移动波形读数游标</dd>
+        <dt>↑ ↓</dt><dd>基线上移 / 下移（双击波形或按 D 复位）</dd>
+        <dt>D</dt><dd>复位增益与基线</dd>
+        <dt>E</dt><dd>导出当前波形与参数的快照 PNG</dd>
+        <dt>F</dt><dd>专注模式（隐藏参数栏）</dd>
+        <dt>C</dt><dd>高对比主题</dd>
+        <dt>G</dt><dd>循环增益档（自动 / 0.5× / 1× / 2×）</dd>
+        <dt>B</dt><dd>节拍提示音开关</dd>
+        <dt>?</dt><dd>打开 / 关闭本面板</dd>
+      </dl>
+      <p class="note">波形交互：悬停显示读数，点击钉住，再点一次取消；聚焦画布后可用方向键移动读数。<br>
+        本页为教学演示，不作为医疗诊断用途。</p>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

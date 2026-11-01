@@ -1,0 +1,143 @@
+{
+  "source": "ecgb/regs.py（单一来源，勿手改本文件）",
+  "generated_by": "tools/gen_regmap.py",
+  "ip_name": "afe_ctrl_0",
+  "base_address": "0x43C00000",
+  "range_bytes": 16,
+  "bit_plan_authority": "《三人数据流接口表.xlsx》Sheet④（2026-10-07 拍板：优先按表里的来）",
+  "notes": [
+    "板上 FCLK_CLK0 = 31.25 MHz（实测）；PS 时钟由 boot 决定，Vivado 里写 50 MHz 不生效",
+    "有效采样率 = sample_cnt 增量 / 实际耗时，是唯一权威；理论 31.25、2026-10-05 实测 19.53（Q-01）",
+    "filt_valid 是单周期脉冲，Python 轮询读不到",
+    "new_flag 读清，一次轮询只读一次 0x0C",
+    "[3:2] 带宽档位与 [5..31] 复位/系数切换均为预留，RTL 未实现"
+  ],
+  "registers": [
+    {
+      "offset": "0x00",
+      "name": "CTRL",
+      "attr": "RW",
+      "desc": "控制寄存器",
+      "fields": [
+        {
+          "bits": "[0]",
+          "name": "en",
+          "desc": "1=开采样（tick_gen 计数使能）"
+        },
+        {
+          "bits": "[1]",
+          "name": "filt_en",
+          "desc": "1=滤波链生效"
+        },
+        {
+          "bits": "[2]",
+          "name": "bypass",
+          "desc": "1=强制旁路原始样本（对照演示）"
+        },
+        {
+          "bits": "[3:2]",
+          "name": "band",
+          "desc": "带宽档位 00=40Hz(现状) 01=25Hz 10=15Hz 11=保留；RTL 未实现，写了不生效"
+        },
+        {
+          "bits": "[5..31]",
+          "name": "reserved",
+          "desc": "系数切换 / 复位等（预留未实现），RTL 实现前不要依赖"
+        }
+      ]
+    },
+    {
+      "offset": "0x04",
+      "name": "SAMPLE_CNT",
+      "attr": "RO",
+      "desc": "上电以来 EOC 计数，只增不复位",
+      "fields": [
+        {
+          "bits": "[31:0]",
+          "name": "sample_cnt",
+          "desc": "自检用：每秒增量 = 有效采样率"
+        }
+      ]
+    },
+    {
+      "offset": "0x08",
+      "name": "FILT",
+      "attr": "RO",
+      "desc": "滤波输出",
+      "fields": [
+        {
+          "bits": "[15:0]",
+          "name": "filt",
+          "desc": "滤波后码值"
+        },
+        {
+          "bits": "[30:16]",
+          "name": "reserved",
+          "desc": "保留"
+        },
+        {
+          "bits": "[31]",
+          "name": "filt_valid",
+          "desc": "20 ns 单周期脉冲，Python 轮询读不到，别当判据"
+        }
+      ]
+    },
+    {
+      "offset": "0x0C",
+      "name": "RAW",
+      "attr": "RO",
+      "desc": "原始样本 + 新数据标志",
+      "fields": [
+        {
+          "bits": "[15:0]",
+          "name": "sample_raw",
+          "desc": "XADC 原始码值"
+        },
+        {
+          "bits": "[30:16]",
+          "name": "reserved",
+          "desc": "保留"
+        },
+        {
+          "bits": "[31]",
+          "name": "new_flag",
+          "desc": "有新样本；读清：一次读操作即清零，同一轮询只读一次"
+        }
+      ]
+    }
+  ],
+  "ctrl_combos": [
+    {
+      "value": "0x1",
+      "name": "CTRL_RAW_PASS",
+      "desc": "直通原始样本（M2 对照左半边）"
+    },
+    {
+      "value": "0x3",
+      "name": "CTRL_FILTERED",
+      "desc": "滤波输出（M2 对照右半边）"
+    },
+    {
+      "value": "0x5",
+      "name": "CTRL_BYPASSED",
+      "desc": "强制旁路"
+    },
+    {
+      "value": "0x0",
+      "name": "（无）",
+      "desc": "停采样：计数冻结，XADC 不再被触发"
+    },
+    {
+      "value": "0x1 | band<<2",
+      "name": "regs.ctrl_word(band=n)",
+      "desc": "叠加带宽档位（[3:2]，RTL 未实现）"
+    }
+  ],
+  "conversion": {
+    "code_mid": 32768.0,
+    "code_full": 65536.0,
+    "divider_a0": 0.301,
+    "volt": "code / 65536 / 0.301",
+    "note": "A0 板载 2.32k+1k 分压，比值约 0.301；AD8232 输出直连 A0"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "session_dir": "./records/session_20250504_102122_275",
+  "fs": 31.212205075847617,
+  "n_written": 1864,
+  "duration_s": 60.45,
+  "frames_dropped": 0,
+  "segments": [
+    "./records/session_20250504_102122_275/part01.csv"
+  ],
+  "started_wall": "2025-05-04 10:21:22",
+  "ended_wall": "2025-05-04 10:22:22",
+  "reason": "close",
+  "note": "项目仅用于教学演示，不作为医疗诊断用途"
+}
