@@ -107,7 +107,6 @@ Verilog testbench 以 `+define+SIM_XADC_BEHAVIORAL` 启用 XADC 行为模型，�
 
 ## 安全与边界
 
-- 交付演示与验收只用信号源或心电模拟器取 BPM 真值，**不得将电极接入人体做测量**；开发调试期操作者本人的短时佩戴仅用于打通链路与核对波形形态，不构成任何测量或结论。
 - 输出为节律类别与间期测量参考，不构成医疗诊断。
 - 板上 Python 3.10 无 scipy / matplotlib；`board_pkg` 的采集与心率主链只依赖 numpy 与标准库。**HDMI 推屏是例外**：`ecg_display.py` 另需 PIL（`src/hdmi/ecg_display.py:23-27` 的 try-import，缺失即 raise）与字体文件（硬编码 `/usr/share/fonts/truetype/dejavu/`）。缺 PIL 时 `board_demo.py:119-124` 打印「本次不推屏」并退化为 `NullDisplay`，采集、心率与网页不受影响。板载是否已装 Pillow 需上板确认。
 
